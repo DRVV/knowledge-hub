@@ -1,0 +1,102 @@
+import { ObjectId } from 'mongodb';
+
+export interface Node {
+  id: string;
+  type: string;
+  position: { x: number; y: number };
+  data: {
+    label: string;
+    description?: string;
+    // Domain-specific properties related to semiconductor industry
+    eventType?: string;
+    timestamp?: Date;
+    // Additional properties
+  };
+  // ReactFlow specific properties
+  selected?: boolean;
+  dragging?: boolean;
+  // Other properties
+}
+
+export interface Edge {
+  id: string;
+  source: string;
+  target: string;
+  type?: string;
+  animated?: boolean;
+  data?: {
+    label?: string;
+    description?: string;
+    // Domain-specific properties for causal relationships
+    relationshipType?: string;
+    strength?: number;
+    // Additional properties
+  };
+}
+
+export interface Graph {
+  _id?: ObjectId | string;
+  title: string;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string; // User identifier
+  metadata: {
+    provider: string;
+    originalFilename: string;
+    // Other metadata fields
+  };
+  nodes: Node[];
+  edges: Edge[];
+  // ReactFlow specific properties
+  viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+}
+
+export interface Comment {
+  _id?: ObjectId | string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string; // User identifier
+  targetType: 'graph' | 'node' | 'edge';
+  targetId: string; // ID of the graph, node, or edge
+  parentId?: string; // For threaded comments
+  replies?: Comment[];
+}
+
+export interface Version {
+  _id?: ObjectId | string;
+  graphId: ObjectId | string; // Reference to the original graph
+  snapshot: Graph; // Complete graph state
+  createdAt: Date;
+  createdBy: string; // User identifier
+  commitMessage: string;
+}
+
+export interface FilterState {
+  searchText: string;
+  dateRange: { start: Date | null; end: Date | null };
+  providers: string[];
+  eventTypes: string[];
+  relationshipTypes: string[];
+  // Additional filter criteria
+}
+
+export interface GraphListItem {
+  _id: string;
+  title: string;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  nodeCount: number;
+  edgeCount: number;
+  metadata: {
+    provider: string;
+    originalFilename: string;
+  };
+}
