@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { ChevronUp, ChevronDown, Search, Download, Filter } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { ChevronUp, ChevronDown, Search, Download, Filter, Save, Edit3, X, Check, History } from 'lucide-react';
 import { CSVData, formatCellValue } from '@/utils/csvParser';
+import VersionManager from './VersionManager';
 
 interface DataTableProps {
   data: CSVData;
@@ -10,6 +11,9 @@ interface DataTableProps {
   maxHeight?: string;
   showSearch?: boolean;
   showExport?: boolean;
+  editable?: boolean;
+  onSave?: (data: CSVData) => Promise<void>;
+  csvPath?: string;
 }
 
 interface SortConfig {
@@ -22,12 +26,102 @@ export default function DataTable({
   className = '', 
   maxHeight = '400px',
   showSearch = true,
-  showExport = true
+  showExport = true,
+  editable = false,
+  onSave,
+  csvPath
 }: DataTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  
+  // Editing state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedData, setEditedData] = useState<CSVData>(data);
+  const [editingCell, setEditingCell] = useState<{row: number, col: number} | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Version management state
+  const [showVersionManager, setShowVersionManager] = useState(false);
+
+  // Sync edited data when data prop changes
+  React.useEffect(() => {
+    setEditedData(data);
+  }, [data]);
+
+  // Auto-resize textareas when entering edit mode
+  React.useEffect(() => {
+    if (isEditMode) {
+      // Small delay to ensure textareas are rendered
+      setTimeout(() => {
+        const textareas = document.querySelectorAll('textarea');
+        textareas.forEach(textarea => {
+          textarea.style.height = 'auto';
+          textarea.style.height = Math.max(32, textarea.scrollHeight) + 'px';
+        });
+      }, 10);
+    }
+  }, [isEditMode]);
+
+  // Editing handlers
+  const handleCellEdit = useCallback((rowIndex: number, colIndex: number, value: string) => {
+    setEditedData(prev => {
+      const newData = { ...prev };
+      newData.rows = [...prev.rows];
+      newData.rows[rowIndex] = [...prev.rows[rowIndex]];
+      newData.rows[rowIndex][colIndex] = value;
+      return newData;
+    });
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!onSave) return;
+    
+    setIsSaving(true);
+    try {
+      await onSave(editedData);
+      setIsEditMode(false);
+    } catch (error) {
+      console.error('Failed to save data:', error);
+      // Could add error handling here
+    } finally {
+      setIsSaving(false);
+    }
+  }, [editedData, onSave]);
+
+  const handleCancelEdit = useCallback(() => {
+    setEditedData(data);
+    setIsEditMode(false);
+    setEditingCell(null);
+  }, [data]);
+
+  // Version management handlers
+  const handleRestore = useCallback(async (backupFileName: string) => {
+    if (!csvPath) return;
+
+    try {
+      const response = await fetch(`/api/csv?path=${encodeURIComponent(csvPath)}&action=restore`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ backupFileName }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to restore backup');
+      }
+
+      // Refresh the data by calling onSave with current data to trigger a refresh
+      if (onSave) {
+        window.location.reload(); // Simple way to refresh the data
+      }
+    } catch (error) {
+      console.error('Failed to restore backup:', error);
+      throw error;
+    }
+  }, [csvPath, onSave]);
 
   // Filter data based on search term
   const filteredData = useMemo(() => {
@@ -148,15 +242,63 @@ export default function DataTable({
             </div>
           </div>
           
-          {showExport && (
-            <button
-              onClick={handleExport}
-              className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export CSV</span>
-            </button>
-          )}
+          <div className="flex items-center space-x-2">
+            {editable && (
+              <>
+                {!isEditMode ? (
+                  <button
+                    onClick={() => setIsEditMode(true)}
+                    className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span>Edit</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {isSaving ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      disabled={isSaving}
+                      className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <X className="w-4 h-4" />
+                      <span>Cancel</span>
+                    </button>
+                  </>
+                )}
+                {csvPath && (
+                  <button
+                    onClick={() => setShowVersionManager(true)}
+                    className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                    title="View version history"
+                  >
+                    <History className="w-4 h-4" />
+                    <span>History</span>
+                  </button>
+                )}
+              </>
+            )}
+            {showExport && (
+              <button
+                onClick={handleExport}
+                className="flex items-center space-x-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -195,20 +337,44 @@ export default function DataTable({
         >
           <table className="w-full table-fixed">
             <tbody className="divide-y divide-gray-200">
-              {paginatedData.map((row, rowIndex) => (
-                <tr key={rowIndex} className="hover:bg-gray-50">
-                  {row.map((cell, cellIndex) => (
-                    <td
-                      key={cellIndex}
-                      className="px-3 py-4 text-sm text-gray-900 truncate"
-                      style={{ width: `${100 / data.headers.length}%` }}
-                      title={cell}
-                    >
-                      {formatCellValue(cell)}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {(isEditMode ? editedData.rows : paginatedData).slice(0, rowsPerPage).map((row, rowIndex) => {
+                const actualRowIndex = isEditMode ? rowIndex : (currentPage - 1) * rowsPerPage + rowIndex;
+                return (
+                  <tr key={rowIndex} className="hover:bg-gray-50">
+                    {row.map((cell, cellIndex) => (
+                      <td
+                        key={cellIndex}
+                        className="px-3 py-4 text-sm text-gray-900"
+                        style={{ width: `${100 / data.headers.length}%` }}
+                      >
+                        {isEditMode ? (
+                          <textarea
+                            value={cell}
+                            onChange={(e) => handleCellEdit(actualRowIndex, cellIndex, e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500 resize-none overflow-hidden min-h-[2rem]"
+                            onFocus={() => setEditingCell({row: actualRowIndex, col: cellIndex})}
+                            onBlur={() => setEditingCell(null)}
+                            rows={1}
+                            style={{
+                              height: 'auto',
+                              minHeight: '2rem'
+                            }}
+                            onInput={(e) => {
+                              const target = e.target as HTMLTextAreaElement;
+                              target.style.height = 'auto';
+                              target.style.height = Math.max(32, target.scrollHeight) + 'px';
+                            }}
+                          />
+                        ) : (
+                          <div className="whitespace-pre-wrap break-words" title={cell}>
+                            {formatCellValue(cell)}
+                          </div>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -256,6 +422,14 @@ export default function DataTable({
           </div>
         </div>
       )}
+
+      {/* Version Manager Modal */}
+      <VersionManager
+        csvPath={csvPath || ''}
+        isOpen={showVersionManager}
+        onClose={() => setShowVersionManager(false)}
+        onRestore={handleRestore}
+      />
     </div>
   );
 }

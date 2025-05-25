@@ -31,6 +31,36 @@ function ExplorerContent() {
   const [csvData, setCsvData] = useState<CSVData | null>(null);
   const [csvLoading, setCsvLoading] = useState(false);
 
+  // CSV save handler
+  const handleSaveCSV = async (data: CSVData) => {
+    if (!graph?.metadata.csvPath) {
+      throw new Error('No CSV path available');
+    }
+
+    try {
+      const response = await fetch(`/api/csv?path=${encodeURIComponent(graph.metadata.csvPath)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save CSV');
+      }
+
+      // Update local state with saved data
+      setCsvData(data);
+      
+      console.log('CSV saved successfully');
+    } catch (error) {
+      console.error('Failed to save CSV:', error);
+      throw error;
+    }
+  };
+
   // Sample data for demonstration
   const sampleGraph: Graph = {
     _id: 'sample',
@@ -612,6 +642,9 @@ function ExplorerContent() {
                     maxHeight="100vh"
                     showSearch={true}
                     showExport={true}
+                    editable={true}
+                    onSave={handleSaveCSV}
+                    csvPath={graph?.metadata.csvPath}
                   />
                 )}
               </div>
@@ -645,6 +678,9 @@ function ExplorerContent() {
                     maxHeight={`${(tableViewState.tableHeight || 350) - 60}px`}
                     showSearch={true}
                     showExport={true}
+                    editable={true}
+                    onSave={handleSaveCSV}
+                    csvPath={graph?.metadata.csvPath}
                   />
                 )}
               </div>
@@ -682,6 +718,9 @@ function ExplorerContent() {
                     showSearch={false}
                     showExport={false}
                     className="border-0"
+                    editable={true}
+                    onSave={handleSaveCSV}
+                    csvPath={graph?.metadata.csvPath}
                   />
                 </div>
               )}
