@@ -71,6 +71,40 @@ const GraphCanvas = forwardRef<GraphCanvasRef, GraphCanvasProps>(({
   const [nodes, setNodes, onNodesStateChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesStateChange] = useEdgesState(initialEdges);
 
+  // Update nodes and edges when graph prop changes
+  useEffect(() => {
+    if (graph) {
+      const newNodes: FlowNode[] = graph.nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: node.data,
+        selected: node.selected,
+        dragging: node.dragging,
+      }));
+
+      const newEdges: FlowEdge[] = graph.edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type,
+        animated: edge.animated,
+        data: edge.data,
+      }));
+
+      setNodes(newNodes);
+      setEdges(newEdges);
+
+      // Auto-fit view when graph is updated with new AI-generated content
+      if (reactFlowInstance && graph.metadata?.aiGenerated) {
+        // Small delay to ensure nodes are rendered before fitting view
+        setTimeout(() => {
+          reactFlowInstance.fitView({ padding: 0.1, duration: 500 });
+        }, 100);
+      }
+    }
+  }, [graph, setNodes, setEdges, reactFlowInstance]);
+
   // Export functionality
   const exportToPNG = useCallback(async (filename: string = 'knowledge-graph.png') => {
     if (!reactFlowWrapper.current) return;

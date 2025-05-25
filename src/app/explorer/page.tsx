@@ -6,7 +6,8 @@ import { Node as FlowNode, Edge as FlowEdge } from '@xyflow/react';
 import { Search, Filter, MessageSquare, History, Settings, Plus, Download, Table, LayoutGrid, Maximize2, Minimize2 } from 'lucide-react';
 import GraphCanvas, { GraphCanvasRef } from '@/components/Graph/GraphCanvas';
 import DataTable from '@/components/Table/DataTable';
-import { Graph, CSVData, TableViewState } from '@/types/graph';
+import GraphGenerator from '@/components/Graph/GraphGenerator';
+import { Graph, CSVData, TableViewState, Node, Edge } from '@/types/graph';
 import { parseCSV, generateSampleCSVData } from '@/utils/csvParser';
 
 function ExplorerContent() {
@@ -304,6 +305,30 @@ function ExplorerContent() {
     }));
   };
 
+  // Graph generation handler
+  const handleGraphGenerated = (nodes: Node[], edges: Edge[], metadata: Record<string, unknown>) => {
+    if (!graph) return;
+
+    // Update the current graph with generated nodes and edges
+    const updatedGraph = {
+      ...graph,
+      nodes: [...nodes],
+      edges: [...edges],
+      updatedAt: new Date(),
+      metadata: {
+        ...graph.metadata,
+        generatedAt: metadata.generatedAt,
+        aiGenerated: true,
+      },
+    };
+
+    setGraph(updatedGraph);
+    
+    // Clear selections since we have new nodes/edges
+    setSelectedNodes([]);
+    setSelectedEdges([]);
+  };
+
   // Resize handlers
   const handleMouseDown = (e: React.MouseEvent, direction: 'horizontal' | 'vertical') => {
     e.preventDefault();
@@ -447,6 +472,15 @@ function ExplorerContent() {
                   type="text"
                   placeholder="Search nodes and edges..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* AI Graph Generation */}
+              <div className="border-t pt-4">
+                <GraphGenerator
+                  csvData={csvData}
+                  onGraphGenerated={handleGraphGenerated}
+                  disabled={csvLoading}
                 />
               </div>
             </div>
