@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile } from 'fs/promises';
-import { join } from 'path';
+import { join, basename, normalize } from 'path';
+import { existsSync } from 'fs';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const csvPath = searchParams.get('path');
+    console.log('CSV Path:', csvPath);
 
     if (!csvPath) {
       return NextResponse.json(
@@ -14,27 +16,42 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // For demonstration, we'll serve sample CSV data
-    // In a real application, you would read from the actual file system
-    // and implement proper security measures to prevent path traversal attacks
+    // Validate and sanitize the path to prevent directory traversal attacks
+    const fileName = basename(csvPath);
     
-    // Sample CSV data for demonstration
-    const sampleCSV = `ID,Event,Type,Date,Impact Score,Description
-1,COVID-19 Pandemic,external-shock,2020-03-01,9.5,Global pandemic disrupting manufacturing
-2,Factory Shutdowns,operational-impact,2020-04-01,8.7,Manufacturing plants closed in Asia
-3,Increased Demand,market-demand,2020-06-01,7.2,Rising demand for electronics
-4,Global Chip Shortage,supply-shortage,2021-01-01,9.0,Widespread shortage affecting industries
-5,Supply Chain Recovery,recovery,2022-01-01,6.5,Gradual recovery of supply chains
-6,New Manufacturing Capacity,expansion,2023-01-01,7.8,Investment in new facilities`;
+    // Only allow CSV files
+    if (!fileName.endsWith('.csv')) {
+      return NextResponse.json(
+        { error: 'Only CSV files are allowed' },
+        { status: 400 }
+      );
+    }
 
-    // In a real implementation, you would:
-    // 1. Validate the path to prevent directory traversal
-    // 2. Check user permissions
-    // 3. Read the actual file
-    // const safePath = join(process.cwd(), 'data', 'csv', basename(csvPath));
-    // const csvContent = await readFile(safePath, 'utf-8');
+    // Construct safe path within the public/data directory
+    const safePath = join(process.cwd(), 'public', 'data', fileName);
+    const normalizedPath = normalize(safePath);
+    
+    // Ensure the path is still within the allowed directory
+    const allowedDir = join(process.cwd(), 'public', 'data');
+    if (!normalizedPath.startsWith(allowedDir)) {
+      return NextResponse.json(
+        { error: 'Invalid file path' },
+        { status: 400 }
+      );
+    }
 
-    return new NextResponse(sampleCSV, {
+    // Check if file exists
+    if (!existsSync(normalizedPath)) {
+      return NextResponse.json(
+        { error: 'CSV file not found' },
+        { status: 404 }
+      );
+    }
+
+    // Read the actual CSV file
+    const csvContent = await readFile(normalizedPath, 'utf-8');
+
+    return new NextResponse(csvContent, {
       status: 200,
       headers: {
         'Content-Type': 'text/csv',
