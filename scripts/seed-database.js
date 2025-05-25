@@ -13,7 +13,7 @@ const sampleGraphs = [
     metadata: {
       provider: "internal-research",
       originalFilename: "semiconductor_analysis_2024.json",
-      csvPath: "semiconductor_supply_chain.csv"
+      csvPath: "/data/semiconductor_supply_chain.csv"
     },
     nodes: [
       {
@@ -125,7 +125,8 @@ const sampleGraphs = [
     createdBy: "researcher@ailab.org",
     metadata: {
       provider: "academic-research",
-      originalFilename: "ai_timeline_2024.json"
+      originalFilename: "ai_timeline_2024.json",
+      csvPath: "/data/ai_development_timeline.csv"
     },
     nodes: [
       {
@@ -222,7 +223,8 @@ const sampleGraphs = [
     createdBy: "climate@research.gov",
     metadata: {
       provider: "government-data",
-      originalFilename: "climate_impact_2024.json"
+      originalFilename: "climate_impact_2024.json",
+      csvPath: "/data/climate_impact_network.csv"
     },
     nodes: [
       {
