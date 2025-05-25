@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useCallback, useState, useRef, forwardRef, useImperativeHandle, useEffect } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -14,6 +14,7 @@ import {
   Node as FlowNode,
   ReactFlowProvider,
   ReactFlowInstance,
+  Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { toPng, toJpeg, toSvg } from 'html-to-image';
@@ -43,6 +44,10 @@ const GraphCanvas = forwardRef<GraphCanvasRef, GraphCanvasProps>(({
 }, ref) => {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [currentViewport, setCurrentViewport] = useState<Viewport>(
+    graph?.viewport || { x: 0, y: 0, zoom: 1 }
+  );
+  const [isInitialized, setIsInitialized] = useState(false);
   
   // Convert our custom types to ReactFlow types
   const initialNodes: FlowNode[] = graph?.nodes.map(node => ({
@@ -152,6 +157,19 @@ const GraphCanvas = forwardRef<GraphCanvasRef, GraphCanvasProps>(({
 
   const onInit = useCallback((rfi: ReactFlowInstance) => {
     setReactFlowInstance(rfi);
+    if (!isInitialized) {
+      // Only fit view on initial load
+      rfi.fitView();
+      setIsInitialized(true);
+    } else {
+      // Restore viewport on subsequent renders
+      rfi.setViewport(currentViewport);
+    }
+  }, [isInitialized, currentViewport]);
+
+  // Handle viewport changes
+  const onViewportChange = useCallback((viewport: Viewport) => {
+    setCurrentViewport(viewport);
   }, []);
 
   const handleNodesChange = useCallback(
@@ -229,10 +247,11 @@ const GraphCanvas = forwardRef<GraphCanvasRef, GraphCanvasProps>(({
         onSelectionChange={onSelectionChangeHandler}
         onDrop={onDrop}
         onDragOver={onDragOver}
+        onViewportChange={onViewportChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        fitView
         attributionPosition="top-right"
+        defaultViewport={currentViewport}
       >
         <Controls />
         <MiniMap />

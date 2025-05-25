@@ -24,8 +24,10 @@ function ExplorerContent() {
   const [tableViewState, setTableViewState] = useState<TableViewState>({
     showTable: false,
     tablePosition: 'bottom',
-    tableHeight: 300,
+    tableHeight: 350,
+    tableWidth: 400,
   });
+  const [isResizing, setIsResizing] = useState(false);
   const [csvData, setCsvData] = useState<CSVData | null>(null);
   const [csvLoading, setCsvLoading] = useState(false);
 
@@ -272,6 +274,44 @@ function ExplorerContent() {
     }));
   };
 
+  // Resize handlers
+  const handleMouseDown = (e: React.MouseEvent, direction: 'horizontal' | 'vertical') => {
+    e.preventDefault();
+    setIsResizing(true);
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startHeight = tableViewState.tableHeight || 350;
+    const startWidth = tableViewState.tableWidth || 400;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (direction === 'vertical') {
+        const deltaY = startY - e.clientY;
+        const newHeight = Math.max(200, Math.min(600, startHeight + deltaY));
+        setTableViewState(prev => ({
+          ...prev,
+          tableHeight: newHeight
+        }));
+      } else {
+        const deltaX = startX - e.clientX;
+        const newWidth = Math.max(300, Math.min(800, startWidth + deltaX));
+        setTableViewState(prev => ({
+          ...prev,
+          tableWidth: newWidth
+        }));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -281,7 +321,7 @@ function ExplorerContent() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
       <div className="w-80 bg-white shadow-sm border-r flex flex-col">
         {/* Sidebar Header */}
@@ -543,7 +583,7 @@ function ExplorerContent() {
           {tableViewState.showTable && tableViewState.tablePosition === 'right' ? (
             // Side-by-side layout
             <div className="flex h-full">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 {graph && (
                   <GraphCanvas
                     ref={graphCanvasRef}
@@ -554,11 +594,22 @@ function ExplorerContent() {
                   />
                 )}
               </div>
-              <div className="w-96 border-l bg-white">
+              {/* Vertical resize handle */}
+              <div
+                className="w-1 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors"
+                onMouseDown={(e) => handleMouseDown(e, 'horizontal')}
+              />
+              <div 
+                className="border-l bg-white flex flex-col shrink-0 overflow-hidden"
+                style={{ 
+                  width: `${Math.min(tableViewState.tableWidth || 400, 500)}px`,
+                  maxWidth: '40vw'
+                }}
+              >
                 {csvData && (
                   <DataTable
                     data={csvData}
-                    maxHeight="100%"
+                    maxHeight="100vh"
                     showSearch={true}
                     showExport={true}
                   />
@@ -568,10 +619,7 @@ function ExplorerContent() {
           ) : tableViewState.showTable && tableViewState.tablePosition === 'bottom' ? (
             // Stacked layout
             <div className="flex flex-col h-full">
-              <div 
-                className="flex-1"
-                style={{ height: `calc(100% - ${tableViewState.tableHeight}px)` }}
-              >
+              <div className="flex-1 min-h-0">
                 {graph && (
                   <GraphCanvas
                     ref={graphCanvasRef}
@@ -582,14 +630,19 @@ function ExplorerContent() {
                   />
                 )}
               </div>
+              {/* Horizontal resize handle */}
+              <div
+                className="h-1 bg-gray-300 hover:bg-blue-500 cursor-row-resize transition-colors"
+                onMouseDown={(e) => handleMouseDown(e, 'vertical')}
+              />
               <div 
-                className="border-t bg-white resize-y overflow-hidden"
-                style={{ height: `${tableViewState.tableHeight}px` }}
+                className="border-t bg-white flex flex-col overflow-hidden"
+                style={{ height: `${tableViewState.tableHeight}px`, minHeight: '200px' }}
               >
                 {csvData && (
                   <DataTable
                     data={csvData}
-                    maxHeight="100%"
+                    maxHeight={`${(tableViewState.tableHeight || 350) - 60}px`}
                     showSearch={true}
                     showExport={true}
                   />

@@ -160,40 +160,58 @@ export default function DataTable({
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-auto" style={{ maxHeight }}>
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 sticky top-0">
-            <tr>
-              {data.headers.map((header, index) => (
-                <th
-                  key={index}
-                  onClick={() => handleSort(index)}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
-                >
-                  <div className="flex items-center space-x-1">
-                    <span>{header}</span>
-                    {getSortIcon(index)}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {paginatedData.map((row, rowIndex) => (
-              <tr key={rowIndex} className="hover:bg-gray-50">
-                {row.map((cell, cellIndex) => (
-                  <td
-                    key={cellIndex}
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+      {/* Table Container */}
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Table Header */}
+        <div className="bg-gray-50 border-b border-gray-200">
+          <table className="w-full table-fixed">
+            <thead>
+              <tr>
+                {data.headers.map((header, index) => (
+                  <th
+                    key={index}
+                    onClick={() => handleSort(index)}
+                    className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none truncate"
+                    style={{ width: `${100 / data.headers.length}%` }}
+                    title={header}
                   >
-                    {formatCellValue(cell)}
-                  </td>
+                    <div className="flex items-center space-x-1">
+                      <span className="truncate">{header}</span>
+                      {getSortIcon(index)}
+                    </div>
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+          </table>
+        </div>
+        
+        {/* Scrollable Table Body */}
+        <div 
+          className="flex-1 overflow-auto bg-white"
+          style={{ 
+            maxHeight: maxHeight === '100%' ? 'calc(100% - 120px)' : `calc(${maxHeight} - 60px)`
+          }}
+        >
+          <table className="w-full table-fixed">
+            <tbody className="divide-y divide-gray-200">
+              {paginatedData.map((row, rowIndex) => (
+                <tr key={rowIndex} className="hover:bg-gray-50">
+                  {row.map((cell, cellIndex) => (
+                    <td
+                      key={cellIndex}
+                      className="px-3 py-4 text-sm text-gray-900 truncate"
+                      style={{ width: `${100 / data.headers.length}%` }}
+                      title={cell}
+                    >
+                      {formatCellValue(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}
