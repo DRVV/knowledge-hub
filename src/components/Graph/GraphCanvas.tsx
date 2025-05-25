@@ -22,6 +22,12 @@ import { toPng, toJpeg, toSvg } from 'html-to-image';
 import { nodeTypes } from './CustomNode';
 import { edgeTypes } from './CustomEdge';
 import { Graph } from '@/types/graph';
+import { 
+  getLayoutedElements, 
+  getCircularLayout, 
+  getGridLayout, 
+  getForceLayout 
+} from '@/utils/layout';
 
 interface GraphCanvasProps {
   graph?: Graph;
@@ -34,6 +40,10 @@ export interface GraphCanvasRef {
   exportToPNG: (filename?: string) => Promise<void>;
   exportToJPEG: (filename?: string) => Promise<void>;
   exportToSVG: (filename?: string) => Promise<void>;
+  applyDagreLayout: (direction?: 'TB' | 'BT' | 'LR' | 'RL') => void;
+  applyCircularLayout: () => void;
+  applyGridLayout: () => void;
+  applyForceLayout: () => void;
 }
 
 const GraphCanvas = forwardRef<GraphCanvasRef, GraphCanvasProps>(({
@@ -169,11 +179,135 @@ const GraphCanvas = forwardRef<GraphCanvasRef, GraphCanvasProps>(({
     }
   }, []);
 
+  // Layout functions
+  const applyDagreLayout = useCallback((direction: 'TB' | 'BT' | 'LR' | 'RL' = 'TB') => {
+    const currentNodes = nodes.map(node => ({
+      id: node.id,
+      type: node.type || 'entity',
+      position: node.position,
+      data: {
+        label: (typeof node.data?.label === 'string' ? node.data.label : `Node ${node.id}`),
+        description: (typeof node.data?.description === 'string' ? node.data.description : undefined),
+        eventType: (typeof node.data?.eventType === 'string' ? node.data.eventType : undefined),
+        timestamp: (node.data?.timestamp instanceof Date ? node.data.timestamp : undefined),
+      },
+    }));
+    
+    const currentEdges = edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: edge.type || 'causal',
+      data: edge.data || {},
+    }));
+
+    const { nodes: layoutedNodes } = getLayoutedElements(currentNodes, currentEdges, {
+      direction,
+      nodeWidth: 172,
+      nodeHeight: 80,
+      rankSep: 150,
+      nodeSep: 100,
+    });
+
+    setNodes(layoutedNodes as FlowNode[]);
+    setTimeout(() => {
+      reactFlowInstance?.fitView({ padding: 0.1, duration: 500 });
+    }, 100);
+  }, [nodes, edges, reactFlowInstance, setNodes]);
+
+  const applyCircularLayout = useCallback(() => {
+    const currentNodes = nodes.map(node => ({
+      id: node.id,
+      type: node.type || 'entity',
+      position: node.position,
+      data: {
+        label: (typeof node.data?.label === 'string' ? node.data.label : `Node ${node.id}`),
+        description: (typeof node.data?.description === 'string' ? node.data.description : undefined),
+        eventType: (typeof node.data?.eventType === 'string' ? node.data.eventType : undefined),
+        timestamp: (node.data?.timestamp instanceof Date ? node.data.timestamp : undefined),
+      },
+    }));
+    
+    const currentEdges = edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: edge.type || 'causal',
+      data: edge.data || {},
+    }));
+
+    const { nodes: layoutedNodes } = getCircularLayout(currentNodes, currentEdges);
+    setNodes(layoutedNodes as FlowNode[]);
+    setTimeout(() => {
+      reactFlowInstance?.fitView({ padding: 0.1, duration: 500 });
+    }, 100);
+  }, [nodes, edges, reactFlowInstance, setNodes]);
+
+  const applyGridLayout = useCallback(() => {
+    const currentNodes = nodes.map(node => ({
+      id: node.id,
+      type: node.type || 'entity',
+      position: node.position,
+      data: {
+        label: (typeof node.data?.label === 'string' ? node.data.label : `Node ${node.id}`),
+        description: (typeof node.data?.description === 'string' ? node.data.description : undefined),
+        eventType: (typeof node.data?.eventType === 'string' ? node.data.eventType : undefined),
+        timestamp: (node.data?.timestamp instanceof Date ? node.data.timestamp : undefined),
+      },
+    }));
+    
+    const currentEdges = edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: edge.type || 'causal',
+      data: edge.data || {},
+    }));
+
+    const { nodes: layoutedNodes } = getGridLayout(currentNodes, currentEdges);
+    setNodes(layoutedNodes as FlowNode[]);
+    setTimeout(() => {
+      reactFlowInstance?.fitView({ padding: 0.1, duration: 500 });
+    }, 100);
+  }, [nodes, edges, reactFlowInstance, setNodes]);
+
+  const applyForceLayout = useCallback(() => {
+    const currentNodes = nodes.map(node => ({
+      id: node.id,
+      type: node.type || 'entity',
+      position: node.position,
+      data: {
+        label: (typeof node.data?.label === 'string' ? node.data.label : `Node ${node.id}`),
+        description: (typeof node.data?.description === 'string' ? node.data.description : undefined),
+        eventType: (typeof node.data?.eventType === 'string' ? node.data.eventType : undefined),
+        timestamp: (node.data?.timestamp instanceof Date ? node.data.timestamp : undefined),
+      },
+    }));
+    
+    const currentEdges = edges.map(edge => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      type: edge.type || 'causal',
+      data: edge.data || {},
+    }));
+
+    const { nodes: layoutedNodes } = getForceLayout(currentNodes, currentEdges);
+    setNodes(layoutedNodes as FlowNode[]);
+    setTimeout(() => {
+      reactFlowInstance?.fitView({ padding: 0.1, duration: 500 });
+    }, 100);
+  }, [nodes, edges, reactFlowInstance, setNodes]);
+
   useImperativeHandle(ref, () => ({
     exportToPNG,
     exportToJPEG,
     exportToSVG,
-  }), [exportToPNG, exportToJPEG, exportToSVG]);
+    applyDagreLayout,
+    applyCircularLayout,
+    applyGridLayout,
+    applyForceLayout,
+  }), [exportToPNG, exportToJPEG, exportToSVG, applyDagreLayout, applyCircularLayout, applyGridLayout, applyForceLayout]);
 
   const onConnect = useCallback(
     (params: Connection) => {

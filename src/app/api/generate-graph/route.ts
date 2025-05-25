@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { Node, Edge } from '@/types/graph';
+import { getLayoutedElements } from '@/utils/layout';
 
 // OpenAI client configuration (supports both OpenAI and Azure OpenAI)
 function createOpenAIClient() {
@@ -114,13 +115,15 @@ ${csvText}
 Generate nodes and edges that best represent the relationships and entities in this data.`;
 
     const completion = await openai.chat.completions.create({
-      model: useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4' : 'gpt-4',
+      model: useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4' : 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.7,
       max_tokens: 2000,
+
+      response_format: { type: "json_object" }
     });
 
     const responseText = completion.choices[0]?.message?.content;
@@ -136,14 +139,11 @@ Generate nodes and edges that best represent the relationships and entities in t
       throw new Error('Invalid JSON response from LLM');
     }
 
-    // Validate and transform the response to match our Node and Edge interfaces
-    const nodes: Node[] = llmResponse.nodes.map((node, index) => ({
+    // Create initial nodes with temporary positions
+    const initialNodes: Node[] = llmResponse.nodes.map((node) => ({
       id: node.id,
       type: node.type,
-      position: {
-        x: (index % 5) * 200 + 100, // Arrange nodes in a grid
-        y: Math.floor(index / 5) * 150 + 100,
-      },
+      position: { x: 0, y: 0 }, // Temporary position, will be layouted by Dagre
       data: {
         label: node.label,
         description: node.description,
@@ -151,11 +151,11 @@ Generate nodes and edges that best represent the relationships and entities in t
       },
     }));
 
-    const edges: Edge[] = llmResponse.edges
+    const initialEdges: Edge[] = llmResponse.edges
       .filter(edge => {
         // Ensure source and target nodes exist
-        const sourceExists = nodes.some(n => n.id === edge.source);
-        const targetExists = nodes.some(n => n.id === edge.target);
+        const sourceExists = initialNodes.some(n => n.id === edge.source);
+        const targetExists = initialNodes.some(n => n.id === edge.target);
         return sourceExists && targetExists;
       })
       .map(edge => ({
@@ -170,6 +170,15 @@ Generate nodes and edges that best represent the relationships and entities in t
           strength: edge.strength,
         },
       }));
+
+    // Apply Dagre layout algorithm for better positioning
+    const { nodes, edges } = getLayoutedElements(initialNodes, initialEdges, {
+      direction: 'TB', // Top to Bottom layout
+      nodeWidth: 172,
+      nodeHeight: 80,
+      rankSep: 150,
+      nodeSep: 100,
+    });
 
     return NextResponse.json({
       nodes,

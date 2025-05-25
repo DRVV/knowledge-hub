@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
+    "@types/dagre": "^0.7.52",
     "@types/html2canvas": "^0.5.35",
     "@xyflow/react": "^12.6.4",
+    "dagre": "^0.8.5",
     "html-to-image": "^1.11.11",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.511.0",

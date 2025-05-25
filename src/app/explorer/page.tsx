@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Node as FlowNode, Edge as FlowEdge } from '@xyflow/react';
 import { Search, Filter, MessageSquare, History, Settings, Plus, Download, Table, LayoutGrid, Maximize2, Minimize2 } from 'lucide-react';
 import GraphCanvas, { GraphCanvasRef } from '@/components/Graph/GraphCanvas';
+import LayoutControls from '@/components/Graph/LayoutControls';
 import DataTable from '@/components/Table/DataTable';
 import GraphGenerator from '@/components/Graph/GraphGenerator';
 import { Graph, CSVData, TableViewState, Node, Edge } from '@/types/graph';
@@ -310,14 +311,14 @@ function ExplorerContent() {
     if (!graph) return;
 
     // Update the current graph with generated nodes and edges
-    const updatedGraph = {
+    const updatedGraph: Graph = {
       ...graph,
       nodes: [...nodes],
       edges: [...edges],
       updatedAt: new Date(),
       metadata: {
         ...graph.metadata,
-        generatedAt: metadata.generatedAt,
+        generatedAt: typeof metadata.generatedAt === 'string' ? new Date(metadata.generatedAt) : new Date(),
         aiGenerated: true,
       },
     };
@@ -647,15 +648,18 @@ function ExplorerContent() {
           {tableViewState.showTable && tableViewState.tablePosition === 'right' ? (
             // Side-by-side layout
             <div className="flex h-full">
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 relative">
                 {graph && (
-                  <GraphCanvas
-                    ref={graphCanvasRef}
-                    graph={graph}
-                    onNodesChange={handleNodesChange}
-                    onEdgesChange={handleEdgesChange}
-                    onSelectionChange={handleSelectionChange}
-                  />
+                  <>
+                    <GraphCanvas
+                      ref={graphCanvasRef}
+                      graph={graph}
+                      onNodesChange={handleNodesChange}
+                      onEdgesChange={handleEdgesChange}
+                      onSelectionChange={handleSelectionChange}
+                    />
+                    <LayoutControls graphCanvasRef={graphCanvasRef} />
+                  </>
                 )}
               </div>
               {/* Vertical resize handle */}
@@ -686,15 +690,18 @@ function ExplorerContent() {
           ) : tableViewState.showTable && tableViewState.tablePosition === 'bottom' ? (
             // Stacked layout
             <div className="flex flex-col h-full">
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 relative">
                 {graph && (
-                  <GraphCanvas
-                    ref={graphCanvasRef}
-                    graph={graph}
-                    onNodesChange={handleNodesChange}
-                    onEdgesChange={handleEdgesChange}
-                    onSelectionChange={handleSelectionChange}
-                  />
+                  <>
+                    <GraphCanvas
+                      ref={graphCanvasRef}
+                      graph={graph}
+                      onNodesChange={handleNodesChange}
+                      onEdgesChange={handleEdgesChange}
+                      onSelectionChange={handleSelectionChange}
+                    />
+                    <LayoutControls graphCanvasRef={graphCanvasRef} />
+                  </>
                 )}
               </div>
               {/* Horizontal resize handle */}
@@ -722,21 +729,24 @@ function ExplorerContent() {
           ) : (
             // Full graph view or overlay
             <>
-              <div className="h-full">
+              <div className="h-full relative">
                 {graph && (
-                  <GraphCanvas
-                    ref={graphCanvasRef}
-                    graph={graph}
-                    onNodesChange={handleNodesChange}
-                    onEdgesChange={handleEdgesChange}
-                    onSelectionChange={handleSelectionChange}
-                  />
+                  <>
+                    <GraphCanvas
+                      ref={graphCanvasRef}
+                      graph={graph}
+                      onNodesChange={handleNodesChange}
+                      onEdgesChange={handleEdgesChange}
+                      onSelectionChange={handleSelectionChange}
+                    />
+                    <LayoutControls graphCanvasRef={graphCanvasRef} />
+                  </>
                 )}
               </div>
               
               {/* Overlay Table */}
               {tableViewState.showTable && tableViewState.tablePosition === 'overlay' && csvData && (
-                <div className="absolute top-4 right-4 w-96 max-h-96 bg-white shadow-lg rounded-lg border z-10">
+                <div className="absolute top-4 right-4 w-96 max-h-96 bg-white shadow-lg rounded-lg border z-20">
                   <div className="flex items-center justify-between p-3 border-b">
                     <h3 className="text-sm font-medium text-gray-900">Source Data</h3>
                     <button
