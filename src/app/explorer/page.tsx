@@ -3,9 +3,11 @@
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Node as FlowNode, Edge as FlowEdge } from '@xyflow/react';
-import { Search, Filter, MessageSquare, History, Settings, Plus, Download } from 'lucide-react';
+import { Search, Filter, MessageSquare, History, Settings, Plus, Download, Table, LayoutGrid, Maximize2, Minimize2 } from 'lucide-react';
 import GraphCanvas, { GraphCanvasRef } from '@/components/Graph/GraphCanvas';
-import { Graph } from '@/types/graph';
+import DataTable from '@/components/Table/DataTable';
+import { Graph, CSVData, TableViewState } from '@/types/graph';
+import { parseCSV, generateSampleCSVData } from '@/utils/csvParser';
 
 function ExplorerContent() {
   const searchParams = useSearchParams();
@@ -17,6 +19,15 @@ function ExplorerContent() {
   const [sidebarTab, setSidebarTab] = useState<'search' | 'properties' | 'comments' | 'versions'>('search');
   const [selectedNodes, setSelectedNodes] = useState<FlowNode[]>([]);
   const [selectedEdges, setSelectedEdges] = useState<FlowEdge[]>([]);
+  
+  // Table view state
+  const [tableViewState, setTableViewState] = useState<TableViewState>({
+    showTable: false,
+    tablePosition: 'bottom',
+    tableHeight: 300,
+  });
+  const [csvData, setCsvData] = useState<CSVData | null>(null);
+  const [csvLoading, setCsvLoading] = useState(false);
 
   // Sample data for demonstration
   const sampleGraph: Graph = {
@@ -29,6 +40,7 @@ function ExplorerContent() {
     metadata: {
       provider: 'Sample Data',
       originalFilename: 'demo.json',
+      csvPath: 'sample-data.csv',
     },
     nodes: [
       {
@@ -222,6 +234,44 @@ function ExplorerContent() {
     }
   };
 
+  // Table functionality
+  const loadCSVData = async () => {
+    if (!graph?.metadata.csvPath) {
+      // Use sample data if no CSV path is available
+      setCsvData(generateSampleCSVData());
+      return;
+    }
+
+    setCsvLoading(true);
+    try {
+      const data = await parseCSV(graph.metadata.csvPath);
+      setCsvData(data);
+    } catch (error) {
+      console.error('Failed to load CSV data:', error);
+      // Fallback to sample data
+      setCsvData(generateSampleCSVData());
+    } finally {
+      setCsvLoading(false);
+    }
+  };
+
+  const toggleTable = async () => {
+    if (!tableViewState.showTable && !csvData && !csvLoading) {
+      await loadCSVData();
+    }
+    setTableViewState(prev => ({
+      ...prev,
+      showTable: !prev.showTable
+    }));
+  };
+
+  const handleTablePositionChange = (position: 'bottom' | 'right' | 'overlay') => {
+    setTableViewState(prev => ({
+      ...prev,
+      tablePosition: position
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -402,6 +452,63 @@ function ExplorerContent() {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            {/* Table Toggle Button */}
+            <button
+              onClick={toggleTable}
+              disabled={csvLoading}
+              className={`px-3 py-2 text-sm border rounded-md flex items-center space-x-1 ${
+                tableViewState.showTable
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-300 hover:bg-gray-50'
+              } ${csvLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {csvLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              ) : (
+                <Table className="w-4 h-4" />
+              )}
+              <span>Table View</span>
+            </button>
+            
+            {/* Table Position Controls */}
+            {tableViewState.showTable && (
+              <div className="flex items-center space-x-1 border border-gray-300 rounded-md">
+                <button
+                  onClick={() => handleTablePositionChange('bottom')}
+                  className={`px-2 py-1 text-xs rounded-l-md ${
+                    tableViewState.tablePosition === 'bottom'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'hover:bg-gray-50'
+                  }`}
+                  title="Bottom position"
+                >
+                  <LayoutGrid className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => handleTablePositionChange('right')}
+                  className={`px-2 py-1 text-xs ${
+                    tableViewState.tablePosition === 'right'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'hover:bg-gray-50'
+                  }`}
+                  title="Right position"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => handleTablePositionChange('overlay')}
+                  className={`px-2 py-1 text-xs rounded-r-md ${
+                    tableViewState.tablePosition === 'overlay'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'hover:bg-gray-50'
+                  }`}
+                  title="Overlay position"
+                >
+                  <Minimize2 className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center space-x-1">
               <button 
                 onClick={handleExportToPNG}
@@ -431,16 +538,101 @@ function ExplorerContent() {
           </div>
         </div>
 
-        {/* Graph Canvas */}
-        <div className="flex-1">
-          {graph && (
-            <GraphCanvas
-              ref={graphCanvasRef}
-              graph={graph}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={handleEdgesChange}
-              onSelectionChange={handleSelectionChange}
-            />
+        {/* Graph Canvas and Table Layout */}
+        <div className="flex-1 relative">
+          {tableViewState.showTable && tableViewState.tablePosition === 'right' ? (
+            // Side-by-side layout
+            <div className="flex h-full">
+              <div className="flex-1">
+                {graph && (
+                  <GraphCanvas
+                    ref={graphCanvasRef}
+                    graph={graph}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={handleEdgesChange}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                )}
+              </div>
+              <div className="w-96 border-l bg-white">
+                {csvData && (
+                  <DataTable
+                    data={csvData}
+                    maxHeight="100%"
+                    showSearch={true}
+                    showExport={true}
+                  />
+                )}
+              </div>
+            </div>
+          ) : tableViewState.showTable && tableViewState.tablePosition === 'bottom' ? (
+            // Stacked layout
+            <div className="flex flex-col h-full">
+              <div 
+                className="flex-1"
+                style={{ height: `calc(100% - ${tableViewState.tableHeight}px)` }}
+              >
+                {graph && (
+                  <GraphCanvas
+                    ref={graphCanvasRef}
+                    graph={graph}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={handleEdgesChange}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                )}
+              </div>
+              <div 
+                className="border-t bg-white resize-y overflow-hidden"
+                style={{ height: `${tableViewState.tableHeight}px` }}
+              >
+                {csvData && (
+                  <DataTable
+                    data={csvData}
+                    maxHeight="100%"
+                    showSearch={true}
+                    showExport={true}
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            // Full graph view or overlay
+            <>
+              <div className="h-full">
+                {graph && (
+                  <GraphCanvas
+                    ref={graphCanvasRef}
+                    graph={graph}
+                    onNodesChange={handleNodesChange}
+                    onEdgesChange={handleEdgesChange}
+                    onSelectionChange={handleSelectionChange}
+                  />
+                )}
+              </div>
+              
+              {/* Overlay Table */}
+              {tableViewState.showTable && tableViewState.tablePosition === 'overlay' && csvData && (
+                <div className="absolute top-4 right-4 w-96 max-h-96 bg-white shadow-lg rounded-lg border z-10">
+                  <div className="flex items-center justify-between p-3 border-b">
+                    <h3 className="text-sm font-medium text-gray-900">Source Data</h3>
+                    <button
+                      onClick={() => setTableViewState(prev => ({ ...prev, showTable: false }))}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <Minimize2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <DataTable
+                    data={csvData}
+                    maxHeight="300px"
+                    showSearch={false}
+                    showExport={false}
+                    className="border-0"
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

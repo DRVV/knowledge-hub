@@ -44,6 +44,7 @@ export interface Graph {
   metadata: {
     provider: string;
     originalFilename: string;
+    csvPath?: string; // Path to the CSV file that was used to create this graph
     // Other metadata fields
   };
   nodes: Node[];
@@ -99,4 +100,16 @@ export interface GraphListItem {
     provider: string;
     originalFilename: string;
   };
+}
+
+export interface CSVData {
+  headers: string[];
+  rows: string[][];
+}
+
+export interface TableViewState {
+  showTable: boolean;
+  tablePosition: 'bottom' | 'right' | 'overlay';
+  tableHeight?: number;
+  tableWidth?: number;
 }

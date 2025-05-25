@@ -12,7 +12,8 @@ const sampleGraphs = [
     createdBy: "analyst@techcorp.com",
     metadata: {
       provider: "internal-research",
-      originalFilename: "semiconductor_analysis_2024.json"
+      originalFilename: "semiconductor_analysis_2024.json",
+      csvPath: "semiconductor_supply_chain.csv"
     },
     nodes: [
       {
