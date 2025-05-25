@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Node as FlowNode, Edge as FlowEdge } from '@xyflow/react';
-import { Search, Filter, MessageSquare, History, Settings, Plus, Download, Table, LayoutGrid, Maximize2, Minimize2 } from 'lucide-react';
+import { Search, Filter, MessageSquare, History, Settings, Plus, Download, Table, LayoutGrid, Maximize2, Minimize2, Layout } from 'lucide-react';
 import GraphCanvas, { GraphCanvasRef } from '@/components/Graph/GraphCanvas';
 import LayoutControls from '@/components/Graph/LayoutControls';
 import DataTable from '@/components/Table/DataTable';
@@ -32,6 +32,9 @@ function ExplorerContent() {
   const [isResizing, setIsResizing] = useState(false);
   const [csvData, setCsvData] = useState<CSVData | null>(null);
   const [csvLoading, setCsvLoading] = useState(false);
+  
+  // Layout controls visibility state
+  const [showLayoutControls, setShowLayoutControls] = useState(true);
 
   // CSV save handler
   const handleSaveCSV = async (data: CSVData) => {
@@ -614,6 +617,20 @@ function ExplorerContent() {
               </div>
             )}
 
+            {/* Layout Controls Toggle Button */}
+            <button
+              onClick={() => setShowLayoutControls(!showLayoutControls)}
+              className={`px-3 py-2 text-sm border rounded-md flex items-center space-x-1 ${
+                showLayoutControls
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-300 hover:bg-gray-50'
+              }`}
+              title="Toggle Layout Controls"
+            >
+              <Layout className="w-4 h-4" />
+              <span>Layout</span>
+            </button>
+
             <div className="flex items-center space-x-1">
               <button 
                 onClick={handleExportToPNG}
@@ -658,7 +675,7 @@ function ExplorerContent() {
                       onEdgesChange={handleEdgesChange}
                       onSelectionChange={handleSelectionChange}
                     />
-                    <LayoutControls graphCanvasRef={graphCanvasRef} />
+                    {showLayoutControls && <LayoutControls graphCanvasRef={graphCanvasRef} />}
                   </>
                 )}
               </div>
@@ -700,7 +717,7 @@ function ExplorerContent() {
                       onEdgesChange={handleEdgesChange}
                       onSelectionChange={handleSelectionChange}
                     />
-                    <LayoutControls graphCanvasRef={graphCanvasRef} />
+                    {showLayoutControls && <LayoutControls graphCanvasRef={graphCanvasRef} />}
                   </>
                 )}
               </div>
@@ -739,7 +756,7 @@ function ExplorerContent() {
                       onEdgesChange={handleEdgesChange}
                       onSelectionChange={handleSelectionChange}
                     />
-                    <LayoutControls graphCanvasRef={graphCanvasRef} />
+                    {showLayoutControls && <LayoutControls graphCanvasRef={graphCanvasRef} />}
                   </>
                 )}
               </div>
