@@ -4,9 +4,9 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbopack --port 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3000",
     "lint": "next lint"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
     "dagre": "^0.8.5",
     "html-to-image": "^1.11.11",
     "html2canvas": "^1.4.1",
+    "langfuse": "^3.37.2",
     "lucide-react": "^0.511.0",
     "mongodb": "^6.16.0",
     "mongoose": "^8.15.0",

@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { Node, Edge } from '@/types/graph';
 import { getLayoutedElements } from '@/utils/layout';
+import {
+  createGraphGenerationTrace,
+  getPrompt,
+  logLLMGeneration,
+  flushLangfuse,
+  PROMPT_TEMPLATES,
+} from '@/lib/langfuse';
+import { randomUUID } from 'crypto';
 
 // OpenAI client configuration (supports both OpenAI and Azure OpenAI)
 function createOpenAIClient() {
@@ -33,6 +41,8 @@ interface GenerateGraphRequest {
   context?: string;
   maxNodes?: number;
   maxEdges?: number;
+  sessionId?: string; // For Langfuse tracing
+  userId?: string; // For user tracking
 }
 
 interface LLMGraphResponse {
@@ -56,9 +66,19 @@ interface LLMGraphResponse {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = new Date();
+  let trace: any = null;
+  
   try {
     const body: GenerateGraphRequest = await request.json();
-    const { csvData, context = '', maxNodes = 20, maxEdges = 30 } = body;
+    const { 
+      csvData, 
+      context = '', 
+      maxNodes = 20, 
+      maxEdges = 30,
+      sessionId = randomUUID(),
+      userId 
+    } = body;
 
     if (!csvData || !csvData.headers || !csvData.rows) {
       return NextResponse.json(
@@ -67,6 +87,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Create Langfuse trace for this graph generation request
+    trace = createGraphGenerationTrace(
+      sessionId,
+      userId,
+      {
+        csvHeaders: csvData.headers,
+        csvRowCount: csvData.rows.length,
+        maxNodes,
+        maxEdges,
+        hasContext: !!context,
+      }
+    );
+
     // Check for API key configuration
     const useAzure = process.env.USE_AZURE_OPENAI === 'true';
     const hasApiKey = useAzure 
@@ -74,6 +107,7 @@ export async function POST(request: NextRequest) {
       : process.env.OPENAI_API_KEY;
 
     if (!hasApiKey) {
+      if (trace) trace.update({ tags: ['error', 'api-key-missing'] });
       return NextResponse.json(
         { error: 'OpenAI API key not configured' },
         { status: 500 }
@@ -86,34 +120,20 @@ export async function POST(request: NextRequest) {
     const limitedRows = csvData.rows.slice(0, 50);
     const csvText = [csvData.headers.join(','), ...limitedRows.map(row => row.join(','))].join('\n');
 
-    const systemPrompt = `You are an expert knowledge graph generator. Your task is to analyze CSV data and create meaningful nodes and edges that represent the relationships and entities in the data.
+    // Get prompts from Langfuse (with fallbacks)
+    const systemPrompt = await getPrompt(PROMPT_TEMPLATES.GRAPH_GENERATION_SYSTEM, {
+      maxNodes,
+      maxEdges,
+    });
 
-Guidelines:
-1. Create nodes for important entities, concepts, processes, events, or materials mentioned in the data
-2. Each node should have: id, type (event/process/material/entity/concept), label, description, and optional properties
-3. Create edges that represent meaningful relationships between nodes
-4. Each edge should have: source, target, type (causal/process/temporal/dependency/association), label, optional description, strength (0-100), and relationshipType
-5. Focus on the most important and meaningful relationships
-6. Node IDs should be simple strings (e.g., "silicon_wafer", "photolithography")
-7. Edge IDs will be auto-generated
-8. Maximum ${maxNodes} nodes and ${maxEdges} edges
-9. Ensure all edge source/target IDs match existing node IDs
-10. Provide reasoning for your choices
+    const userPrompt = await getPrompt(PROMPT_TEMPLATES.GRAPH_GENERATION_USER, {
+      context,
+      csvData: csvText,
+    });
 
-Return ONLY a valid JSON object with this structure:
-{
-  "nodes": [...],
-  "edges": [...],
-  "reasoning": "Brief explanation of your analysis approach"
-}`;
-
-    const userPrompt = `Analyze this CSV data and generate a knowledge graph:
-
-${context ? `Additional Context: ${context}\n\n` : ''}CSV Data (headers and sample rows):
-${csvText}
-
-Generate nodes and edges that best represent the relationships and entities in this data.`;
-
+    // Track the LLM call timing
+    const llmStartTime = new Date();
+    
     const completion = await openai.chat.completions.create({
       model: useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4' : 'gpt-4o',
       messages: [
@@ -122,9 +142,10 @@ Generate nodes and edges that best represent the relationships and entities in t
       ],
       temperature: 0.7,
       max_tokens: 2000,
-
       response_format: { type: "json_object" }
     });
+
+    const llmEndTime = new Date();
 
     const responseText = completion.choices[0]?.message?.content;
     if (!responseText) {
@@ -136,6 +157,7 @@ Generate nodes and edges that best represent the relationships and entities in t
       llmResponse = JSON.parse(responseText);
     } catch (parseError) {
       console.error('Failed to parse LLM response:', responseText);
+      if (trace) trace.update({ tags: ['error', 'json-parse-error'] });
       throw new Error('Invalid JSON response from LLM');
     }
 
@@ -180,21 +202,79 @@ Generate nodes and edges that best represent the relationships and entities in t
       nodeSep: 100,
     });
 
+    // Log LLM generation to Langfuse
+    if (trace) {
+      await logLLMGeneration(
+        trace,
+        {
+          systemPrompt,
+          userPrompt,
+          csvRowCount: csvData.rows.length,
+          maxNodes,
+          maxEdges,
+        },
+        {
+          response: responseText,
+          nodeCount: nodes.length,
+          edgeCount: edges.length,
+          reasoning: llmResponse.reasoning,
+        },
+        {
+          promptTokens: completion.usage?.prompt_tokens,
+          completionTokens: completion.usage?.completion_tokens,
+          totalTokens: completion.usage?.total_tokens,
+        },
+        useAzure ? process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4' : 'gpt-4o',
+        llmStartTime,
+        llmEndTime
+      );
+
+      // Update trace with success
+      trace.update({ 
+        tags: ['success', 'graph-generation-complete'],
+        output: {
+          nodeCount: nodes.length,
+          edgeCount: edges.length,
+          reasoning: llmResponse.reasoning,
+        },
+      });
+    }
+
+    const endTime = new Date();
+
+    // Flush Langfuse events
+    await flushLangfuse();
+
     return NextResponse.json({
       nodes,
       edges,
       reasoning: llmResponse.reasoning,
       metadata: {
-        generatedAt: new Date().toISOString(),
+        generatedAt: endTime.toISOString(),
         sourceRowCount: csvData.rows.length,
         processedRowCount: limitedRows.length,
         nodeCount: nodes.length,
         edgeCount: edges.length,
+        sessionId,
+        processingTimeMs: endTime.getTime() - startTime.getTime(),
+        llmTimeMs: llmEndTime.getTime() - llmStartTime.getTime(),
+        tokenUsage: completion.usage,
       },
     });
 
   } catch (error) {
     console.error('Error generating graph:', error);
+    
+    // Update trace with error
+    if (trace) {
+      trace.update({ 
+        tags: ['error', 'graph-generation-failed'],
+        output: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+      await flushLangfuse();
+    }
     
     if (error instanceof Error) {
       if (error.message.includes('API key')) {

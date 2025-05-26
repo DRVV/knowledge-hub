@@ -1,8 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Sparkles, Settings, Loader2, Info, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Sparkles, Settings, Loader2, Info, CheckCircle, AlertCircle, MessageSquare } from 'lucide-react';
 import { Node, Edge, CSVData } from '@/types/graph';
+import FeedbackDialog from './FeedbackDialog';
+
+// Browser-compatible UUID generation
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback for older browsers
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
 
 interface GraphGeneratorProps {
   csvData: CSVData | null;
@@ -32,6 +46,11 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
   const [showOptions, setShowOptions] = useState(false);
   const [generationResult, setGenerationResult] = useState<GenerationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  
+  // Session and trace management for Langfuse
+  const sessionIdRef = useRef<string>(generateUUID());
+  const [currentTraceId, setCurrentTraceId] = useState<string | null>(null);
   
   const [options, setOptions] = useState<GenerationOptions>({
     context: '',
@@ -48,6 +67,7 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
     setIsGenerating(true);
     setError(null);
     setGenerationResult(null);
+    setCurrentTraceId(null);
 
     try {
       const response = await fetch('/api/generate-graph', {
@@ -60,6 +80,8 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
           context: options.context,
           maxNodes: options.maxNodes,
           maxEdges: options.maxEdges,
+          sessionId: sessionIdRef.current,
+          userId: 'demo-user', // In production, this would come from auth
         }),
       });
 
@@ -70,6 +92,7 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
 
       const result = await response.json();
       setGenerationResult(result);
+      setCurrentTraceId(result.metadata?.sessionId || sessionIdRef.current);
       onGraphGenerated(result.nodes, result.edges, result.metadata);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
@@ -78,6 +101,15 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleOpenFeedback = () => {
+    setShowFeedback(true);
+  };
+
+  const handleFeedbackSubmitted = () => {
+    console.log('Feedback submitted successfully');
+    // Could show a success message here
   };
 
   const canGenerate = csvData && csvData.rows.length > 0 && !disabled && !isGenerating;
@@ -181,20 +213,26 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
       )}
 
       {generationResult && (
-        <div className="border border-green-200 rounded-lg p-3 bg-green-50 space-y-2">
+        <div className="border border-green-200 rounded-lg p-3 bg-green-50 space-y-3">
           <div className="flex items-start space-x-2">
             <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-green-800">Graph Generated Successfully</p>
               <div className="text-xs text-green-600 mt-1 space-y-1">
                 <p>Generated {generationResult.nodes.length} nodes and {generationResult.edges.length} edges</p>
-                <p>Processed {generationResult.metadata.processedRowCount as number} of {generationResult.metadata.sourceRowCount as number} rows</p>
+                <p>Processed {String(generationResult.metadata.processedRowCount || 0)} of {String(generationResult.metadata.sourceRowCount || 0)} rows</p>
+                {typeof generationResult.metadata.processingTimeMs === 'number' && (
+                  <p>Processing time: {Math.round(generationResult.metadata.processingTimeMs)}ms</p>
+                )}
+                {generationResult.metadata.tokenUsage && (
+                  <p>Tokens used: {String((generationResult.metadata.tokenUsage as any)?.total_tokens || 0)}</p>
+                )}
               </div>
             </div>
           </div>
           
           {generationResult.reasoning && (
-            <div className="mt-2 p-2 bg-white rounded border border-green-200">
+            <div className="p-2 bg-white rounded border border-green-200">
               <div className="flex items-center space-x-1 mb-1">
                 <Info className="w-3 h-3 text-blue-600" />
                 <span className="text-xs font-medium text-gray-700">AI Analysis</span>
@@ -202,6 +240,17 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
               <p className="text-xs text-gray-600">{generationResult.reasoning}</p>
             </div>
           )}
+
+          {/* Feedback Button */}
+          <div className="flex justify-end pt-2 border-t border-green-200">
+            <button
+              onClick={handleOpenFeedback}
+              className="flex items-center space-x-2 px-3 py-1 text-xs bg-white border border-green-300 text-green-700 rounded hover:bg-green-50 transition-colors"
+            >
+              <MessageSquare className="w-3 h-3" />
+              <span>Rate this generation</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -228,6 +277,15 @@ const GraphGenerator: React.FC<GraphGeneratorProps> = ({
           <strong>Headers:</strong> {csvData.headers.slice(0, 5).join(', ')}{csvData.headers.length > 5 ? '...' : ''}
         </div>
       )}
+
+      {/* Feedback Dialog */}
+      <FeedbackDialog
+        isOpen={showFeedback}
+        onClose={() => setShowFeedback(false)}
+        traceId={currentTraceId || undefined}
+        sessionId={sessionIdRef.current}
+        onFeedbackSubmitted={handleFeedbackSubmitted}
+      />
     </div>
   );
 };
