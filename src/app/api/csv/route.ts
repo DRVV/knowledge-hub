@@ -1,12 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile, writeFile, readdir, mkdir } from 'fs/promises';
-import { join, basename, normalize, extname } from 'path';
+import { join, basename, normalize, extname, dirname, sep } from 'path';
 import { existsSync } from 'fs';
 
-// Helper function to create backup directory
-async function ensureBackupDirectory(fileName: string): Promise<string> {
+// Helper function to validate and sanitize CSV path
+function validateAndSanitizePath(csvPath: string): { isValid: boolean; sanitizedPath: string; fileName: string; relativePath: string } {
+  if (!csvPath) {
+    return { isValid: false, sanitizedPath: '', fileName: '', relativePath: '' };
+  }
+
+  // Remove leading slashes and normalize path
+  let cleanPath = csvPath.replace(/^\/+/, '').replace(/\\/g, '/');
+  
+  // Ensure it ends with .csv
+  if (!cleanPath.endsWith('.csv')) {
+    return { isValid: false, sanitizedPath: '', fileName: '', relativePath: '' };
+  }
+
+  // Normalize and prevent directory traversal
+  const normalizedPath = normalize(cleanPath).replace(/\\/g, '/');
+  
+  // Check for directory traversal attempts
+  if (normalizedPath.includes('..') || normalizedPath.startsWith('/') || normalizedPath.includes('//')) {
+    return { isValid: false, sanitizedPath: '', fileName: '', relativePath: '' };
+  }
+
+  // Extract filename and directory path
+  const fileName = basename(normalizedPath);
+  const relativePath = normalizedPath;
+
+  return {
+    isValid: true,
+    sanitizedPath: normalizedPath,
+    fileName,
+    relativePath
+  };
+}
+
+// Helper function to create backup directory preserving subdirectory structure
+async function ensureBackupDirectory(relativePath: string): Promise<string> {
   const baseDir = join(process.cwd(), 'public', 'data');
-  const backupDir = join(baseDir, 'backups', fileName.replace('.csv', ''));
+  const fileDir = dirname(relativePath);
+  const fileName = basename(relativePath, '.csv');
+  
+  // Create backup path that preserves subdirectory structure
+  const backupDir = fileDir === '.' 
+    ? join(baseDir, 'backups', fileName)
+    : join(baseDir, 'backups', fileDir, fileName);
   
   if (!existsSync(backupDir)) {
     await mkdir(backupDir, { recursive: true });
@@ -20,6 +60,14 @@ function generateTimestampedName(fileName: string): string {
   const nameWithoutExt = fileName.replace('.csv', '');
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
   return `${nameWithoutExt}_${timestamp}.csv`;
+}
+
+// Helper function to ensure directory exists
+async function ensureDirectoryExists(filePath: string): Promise<void> {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
 }
 
 // Helper function to create backup before editing
@@ -52,21 +100,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Validate and sanitize the path to prevent directory traversal attacks
-    const fileName = basename(csvPath);
+    // Validate and sanitize the path to support subdirectories
+    const pathValidation = validateAndSanitizePath(csvPath);
     
-    // Only allow CSV files
-    if (!fileName.endsWith('.csv')) {
+    if (!pathValidation.isValid) {
       return NextResponse.json(
-        { error: 'Only CSV files are allowed' },
+        { error: 'Invalid CSV path. Only CSV files in subdirectories are allowed.' },
         { status: 400 }
       );
     }
 
+    const { fileName, relativePath } = pathValidation;
+
     // If action is 'versions', return list of backups
     if (action === 'versions') {
       try {
-        const backupDir = await ensureBackupDirectory(fileName);
+        const backupDir = await ensureBackupDirectory(relativePath);
         const files = await readdir(backupDir);
         const backupFiles = files
           .filter(file => file.endsWith('.csv'))
@@ -92,8 +141,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Default: serve the CSV file content
-    const safePath = join(process.cwd(), 'public', 'data', fileName);
+    // Default: serve the CSV file content using full relative path
+    const safePath = join(process.cwd(), 'public', 'data', relativePath);
     const normalizedPath = normalize(safePath);
     
     // Ensure the path is still within the allowed directory
@@ -147,19 +196,20 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Validate and sanitize the path to prevent directory traversal attacks
-    const fileName = basename(csvPath);
+    // Validate and sanitize the path to support subdirectories
+    const pathValidation = validateAndSanitizePath(csvPath);
     
-    // Only allow CSV files
-    if (!fileName.endsWith('.csv')) {
+    if (!pathValidation.isValid) {
       return NextResponse.json(
-        { error: 'Only CSV files are allowed' },
+        { error: 'Invalid CSV path. Only CSV files in subdirectories are allowed.' },
         { status: 400 }
       );
     }
 
-    // Construct safe path within the public/data directory
-    const safePath = join(process.cwd(), 'public', 'data', fileName);
+    const { fileName, relativePath } = pathValidation;
+
+    // Construct safe path within the public/data directory using full relative path
+    const safePath = join(process.cwd(), 'public', 'data', relativePath);
     const normalizedPath = normalize(safePath);
     
     // Ensure the path is still within the allowed directory
@@ -183,7 +233,7 @@ export async function PUT(request: NextRequest) {
         );
       }
 
-      const backupDir = await ensureBackupDirectory(fileName);
+      const backupDir = await ensureBackupDirectory(relativePath);
       const backupPath = join(backupDir, backupFileName);
       
       if (!existsSync(backupPath)) {
@@ -195,7 +245,7 @@ export async function PUT(request: NextRequest) {
 
       // Create a backup of current file before restoring
       if (existsSync(normalizedPath)) {
-        await createBackup(normalizedPath, fileName);
+        await createBackup(normalizedPath, relativePath);
       }
 
       // Restore from backup
@@ -222,10 +272,13 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Ensure the directory exists before saving
+    await ensureDirectoryExists(normalizedPath);
+
     // Create backup of original file before saving changes
     let backupPath = '';
     try {
-      backupPath = await createBackup(normalizedPath, fileName);
+      backupPath = await createBackup(normalizedPath, relativePath);
     } catch (error) {
       console.warn('Could not create backup:', error);
       // Continue with save operation even if backup fails
@@ -247,9 +300,14 @@ export async function PUT(request: NextRequest) {
     
     const csvContent = csvLines.join('\n');
 
-    // Generate a new versioned filename for the edited content
+    // Generate a new versioned filename preserving subdirectory structure
+    const fileDir = dirname(relativePath);
     const editedFileName = generateTimestampedName(fileName);
-    const editedPath = join(process.cwd(), 'public', 'data', editedFileName);
+    const editedRelativePath = fileDir === '.' ? editedFileName : join(fileDir, editedFileName);
+    const editedPath = join(process.cwd(), 'public', 'data', editedRelativePath);
+
+    // Ensure the directory exists for the new versioned file
+    await ensureDirectoryExists(editedPath);
 
     // Save the edited content as a new file
     await writeFile(editedPath, csvContent, 'utf-8');
