@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFile, writeFile, readdir, mkdir } from 'fs/promises';
 import { join, basename, normalize, extname, dirname, sep } from 'path';
 import { existsSync } from 'fs';
+import Papa from 'papaparse';
 
 // Helper function to validate and sanitize CSV path
 function validateAndSanitizePath(csvPath: string): { isValid: boolean; sanitizedPath: string; fileName: string; relativePath: string } {
@@ -284,21 +285,16 @@ export async function PUT(request: NextRequest) {
       // Continue with save operation even if backup fails
     }
 
-    // Convert the data back to CSV format
-    const csvLines = [
-      headers.join(','),
-      ...rows.map((row: string[]) => 
-        row.map(cell => {
-          // Escape cells that contain commas, quotes, or newlines
-          if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
-            return `"${cell.replace(/"/g, '""')}"`;
-          }
-          return cell;
-        }).join(',')
-      )
-    ];
-    
-    const csvContent = csvLines.join('\n');
+    // Convert the data back to CSV format using Papa Parse for proper escaping
+    const csvData = [headers, ...rows];
+    const csvContent = Papa.unparse(csvData, {
+      quotes: true,
+      quoteChar: '"',
+      escapeChar: '"',
+      delimiter: ',',
+      header: false,
+      newline: '\n'
+    });
 
     // Generate a new versioned filename preserving subdirectory structure
     const fileDir = dirname(relativePath);

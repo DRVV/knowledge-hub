@@ -1,6 +1,8 @@
 /**
- * CSV Parser utility for reading and parsing CSV files
+ * CSV Parser utility for reading and parsing CSV files using Papa Parse
  */
+
+import Papa from 'papaparse';
 
 export interface CSVData {
   headers: string[];
@@ -26,19 +28,34 @@ export async function parseCSV(csvPath: string): Promise<CSVData> {
 }
 
 export function parseCSVText(csvText: string): CSVData {
-  const lines = csvText.trim().split('\n');
-  
-  if (lines.length === 0) {
+  if (!csvText || csvText.trim().length === 0) {
     return { headers: [], rows: [] };
   }
   
-  // Parse CSV (simple implementation - doesn't handle quoted fields with commas)
-  const parseCSVLine = (line: string): string[] => {
-    return line.split(',').map(cell => cell.trim().replace(/^"(.*)"$/, '$1'));
-  };
+  // Parse CSV using Papa Parse for robust handling of edge cases
+  const parseResult = Papa.parse<string[]>(csvText, {
+    header: false,
+    skipEmptyLines: true,
+    transform: (value: string) => value.trim()
+  });
+
+  if (parseResult.errors && parseResult.errors.length > 0) {
+    console.warn('CSV parsing warnings:', parseResult.errors);
+    // Only throw for critical errors, not warnings
+    const criticalErrors = parseResult.errors.filter((error: Papa.ParseError) => error.type === 'Quotes');
+    if (criticalErrors.length > 0) {
+      throw new Error(`CSV parsing failed: ${criticalErrors[0].message}`);
+    }
+  }
+
+  const data = parseResult.data;
   
-  const headers = parseCSVLine(lines[0]);
-  const rows = lines.slice(1).map(parseCSVLine);
+  if (data.length === 0) {
+    return { headers: [], rows: [] };
+  }
+  
+  const headers = data[0] || [];
+  const rows = data.slice(1);
   
   return { headers, rows };
 }
